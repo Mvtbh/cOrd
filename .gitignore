@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build output
+dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pm2-error.log
+pm2-out.log
+
+# Storage
+*.json
+!package.json
+!tsconfig.json
+!ecosystem.config.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+coverage/
+
+# Docker
+.dockerignore
+
+# Misc
+*.tgz
+.npm
+.eslintcache
+
+# Ignore vscode AI rules
+.github/instructions/codacy.instructions.md

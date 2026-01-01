@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  cord:
+    build: .
+    container_name: cord-logger
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - cord-network
+
+networks:
+  cord-network:
+    driver: bridge
