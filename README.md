@@ -28,10 +28,10 @@ The scripts will automatically install dependencies, build the project, and star
 ### Config
 
 ```env
-DISCORD_TOKEN=your_bot_token
-LOGGING_GUILD_ID=where_logs_go
-TARGET_GUILD_ID=server_to_watch
-MODERATOR_ROLE_ID=role_to_ping (optional, since it only pings for certain moderation actions)
+DISCORD_TOKEN=your_bot_token_here
+LOGGING_GUILD_ID=logging_server_id
+TARGET_GUILD_ID=server_to_monitor_id
+MODERATOR_ROLE_ID=role_id_to_ping (optional, since it only pings for certain moderation actions)
 ```
 
 ## Dev Portal
