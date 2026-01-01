@@ -287,11 +287,11 @@ class c0rd {
       }
     }
 
-    // Find all existing logging categories
+    // Find existing category with exact name match only
     const existingCategories = guild.channels.cache.filter(
       (channel): channel is CategoryChannel =>
         channel.type === ChannelType.GuildCategory &&
-        channel.name.toLowerCase().includes("log")
+        channel.name === CHANNEL_CONFIG.category.name
     );
 
     if (existingCategories.size === 0) {
@@ -305,39 +305,32 @@ class c0rd {
       return newCategory;
     }
 
-    // Find main category
-    let mainCategory = existingCategories.find(
-      (cat) => cat.name === CHANNEL_CONFIG.category.name
-    );
-
-    if (!mainCategory) {
-      mainCategory = existingCategories.first()!;
-      await mainCategory.setName(CHANNEL_CONFIG.category.name);
-    }
-
+    // Use the first matching category
+    const mainCategory = existingCategories.first()!;
     await this.storage.updateCategoryId(mainCategory.id);
 
-    // Cleanup duplicate categories
-    for (const [categoryId, category] of existingCategories) {
-      if (categoryId !== mainCategory.id) {
-        const channelsToMove = category.children.cache.filter(
-          (channel): channel is TextChannel =>
-            channel.type === ChannelType.GuildText
-        );
-
-        for (const channel of channelsToMove.values()) {
-          await channel.setParent(mainCategory.id);
-        }
-
+    // Delete any duplicates with the exact same name
+    const duplicates = Array.from(existingCategories.values()).slice(1);
+    for (const category of duplicates) {
+      for (const channel of category.children.cache.values()) {
         try {
-          await category.delete("Cleaning up duplicate logging categories");
-          console.log(`Info | Deleted duplicate category: ${category.name}`);
-        } catch (error) {
+          await channel.delete("Cleaning up duplicate logging category");
+        } catch (err) {
           console.error(
-            `Error | Failed to delete category ${category.name}:`,
-            error
+            `Error | Failed to delete channel ${channel.name}:`,
+            err
           );
         }
+      }
+
+      try {
+        await category.delete("Cleaning up duplicate logging categories");
+        console.log(`Info | Deleted duplicate category: ${category.name}`);
+      } catch (error) {
+        console.error(
+          `Error | Failed to delete category ${category.name}:`,
+          error
+        );
       }
     }
 
