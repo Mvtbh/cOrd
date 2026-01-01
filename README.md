@@ -103,7 +103,7 @@ The bot creates channels for different log types:
 **Integrations** - webhooks, bots  
 **Joins/Leaves** - member join/leave with details  
 **Screenshare** - streaming and video events  
-**Polls** - vote tracking - WIP
+**Polls** - vote tracking - WIP  
 **Events** - scheduled events and RSVPs - WIP
 
 ## Manual Build
