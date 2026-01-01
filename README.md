@@ -31,7 +31,7 @@ The scripts will automatically install dependencies, build the project, and star
 DISCORD_TOKEN=your_bot_token
 LOGGING_GUILD_ID=where_logs_go
 TARGET_GUILD_ID=server_to_watch
-MODERATOR_ROLE_ID=role_to_ping (optional) | only for certain moderation actions
+MODERATOR_ROLE_ID=role_to_ping (optional, since it only pings for certain moderation actions)
 ```
 
 ## Dev Portal
