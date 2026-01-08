@@ -128,10 +128,9 @@ export class EmbedFactory {
     });
 
     if (deletedBy && deletedBy.id !== message.author.id) {
-      const deleterDisplay = deletedBy.globalName || deletedBy.username;
       embed.addFields({
         name: "Deleted By",
-        value: `${deleterDisplay} (${deletedBy.username}) / ${deletedBy.id}`,
+        value: `<@${deletedBy.id}> (${deletedBy.username}) / ${deletedBy.id}`,
         inline: true,
       });
     }
