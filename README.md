@@ -1,6 +1,6 @@
 # cOrd
 
-A Simple Discord logging bot that tracks most of the things happening in your server And sending them to a separate server.
+A Simple Discord logging bot that tracks most of the things happening in your server And sends them to a separate server.
 
 ## Quick Start
 
@@ -44,14 +44,18 @@ Enable these intents:
 
 Bot Needs:
 
+- Move Members - ONLY Target Server
+- Manage Messages - ONLY Target Server
+- Manage Server - ONLY Target Server
 - View Channels
 - Send Messages
 - Embed Links
+- Manage Roles - Optional (Staff Mention)
 - Read Message History
 - View Audit Log
 - Manage Channels
 
-Permissions For Both Servers
+Permissions on the Servers
 
 ## Running with PM2
 
@@ -99,12 +103,11 @@ The bot creates channels for different log types:
 **Emojis/Stickers** - creation, deletion, updates  
 **Reactions** - additions and removals  
 **Threads** - creation, archiving  
-**AutoMod** - rule executions  
+**AutoMod** - rule executions - WIP
 **Integrations** - webhooks, bots  
 **Joins/Leaves** - member join/leave with details  
 **Screenshare** - streaming and video events  
-**Polls** - vote tracking - WIP  
-**Events** - scheduled events and RSVPs - WIP
+**Events** - scheduled events and RSVPs - Alpha
 
 ## Manual Build
 
