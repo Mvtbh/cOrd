@@ -28,14 +28,12 @@ import {
   Events,
   GuildScheduledEvent,
   GuildScheduledEventStatus,
-  PollAnswer,
 } from "discord.js";
 import { CONFIG, validateConfig, CHANNEL_CONFIG } from "./config";
 import { StorageManager } from "./utils/storage";
 import { AuditLogHelper } from "./utils/auditLogHelper";
 import { EmbedFactory } from "./utils/embedFactory";
 
-// Validate configuration before starting
 validateConfig();
 
 // Format user for embed author/title (no mention)
@@ -123,7 +121,6 @@ interface LoggingChannels {
   leaves: TextChannel;
   reactions: TextChannel;
   screenshare: TextChannel;
-  polls: TextChannel;
   events: TextChannel;
 }
 
@@ -140,7 +137,6 @@ class c0rd {
     new Map();
   private reactionCache: Map<string, { timestamp: number; count: number }> =
     new Map();
-  // Cache for tracking voice move events
   private voiceMoveCache: Map<
     string,
     { executor: User; timestamp: number; usedCount: number; totalCount: number }
@@ -174,18 +170,16 @@ class c0rd {
         Partials.ThreadMember,
         Partials.GuildScheduledEvent,
       ],
-      // Cache settings
       sweepers: {
         messages: {
-          interval: 3600, // 1 hour
-          lifetime: 1800, // 30 minutes
+          interval: 3600,
+          lifetime: 1800,
         },
         users: {
           interval: 3600,
           filter: () => (user) => user.bot && user.id !== this.client.user?.id,
         },
       },
-      // Limit cache size
       makeCache: (manager) => {
         if (manager.name === "GuildMemberManager") {
           return new Collection();
@@ -491,7 +485,6 @@ class c0rd {
     );
     this.client.on("inviteCreate", (invite) => this.onInviteCreate(invite));
     this.client.on("inviteDelete", (invite) => this.onInviteDelete(invite));
-    // Scheduled event handlers
     this.client.on("guildScheduledEventCreate", (event) =>
       this.onScheduledEventCreate(event)
     );
@@ -514,13 +507,6 @@ class c0rd {
       if (event.partial) return;
       this.onScheduledEventUserRemove(event, user);
     });
-    // Poll event handlers
-    this.client.on("messagePollVoteAdd", (answer, userId) =>
-      this.onPollVoteAdd(answer, userId)
-    );
-    this.client.on("messagePollVoteRemove", (answer, userId) =>
-      this.onPollVoteRemove(answer, userId)
-    );
   }
 
   private async onReady(): Promise<void> {
@@ -678,7 +664,8 @@ class c0rd {
     if (message.guild.id !== CONFIG.targetGuildId) return;
 
     const fullMessage = message as Message;
-    if (fullMessage.author?.bot) return;
+    if (!fullMessage.author) return;
+    if (fullMessage.author.bot) return;
     if (!fullMessage.guild) return;
 
     try {
@@ -733,10 +720,26 @@ class c0rd {
         newMsg.author?.bot
       )
         return;
+
+      // Skip if content is the same (embed-only updates like link previews)
       if (old.content === newMsg.content) return;
 
-      const embed = EmbedFactory.createMessageEditEmbed(old, newMsg);
+      // Skip if this is just an embed loading (content was empty/url only, now has embed)
+      const contentIsUrl = /^https?:\/\/\S+$/i.test(
+        newMsg.content?.trim() || ""
+      );
+      if (contentIsUrl && old.embeds.length !== newMsg.embeds.length) return;
+
+      const { embed, mediaUrls } = EmbedFactory.createMessageEditEmbed(
+        old,
+        newMsg
+      );
       await this.loggingChannels.messages.send({ embeds: [embed] });
+
+      // Send GIFs and videos as separate messages so they load
+      for (const url of mediaUrls) {
+        await this.loggingChannels.messages.send({ content: url });
+      }
     } catch (error) {
       console.error("Error | Logging message update:", error);
     }
@@ -879,11 +882,16 @@ class c0rd {
       let color: number = Colors.Purple;
       let logChannel = this.loggingChannels.voice;
 
-      // Clean up old move cache entries
+      // Clean up old cache entries
       const now = Date.now();
       for (const [key, value] of this.voiceMoveCache.entries()) {
         if (now - value.timestamp > 10000) {
           this.voiceMoveCache.delete(key);
+        }
+      }
+      for (const [key, value] of this.reactionCache.entries()) {
+        if (now - value.timestamp > 10000) {
+          this.reactionCache.delete(key);
         }
       }
 
@@ -1572,7 +1580,7 @@ class c0rd {
         triggerTypeNames[execution.ruleTriggerType] ||
         `Unknown (${execution.ruleTriggerType})`;
 
-      // Try to fetch the user for better formatting
+      // Tries to fetch the user
       let user: User | null = null;
       try {
         user = await this.client.users.fetch(execution.userId);
@@ -1742,13 +1750,35 @@ class c0rd {
   ): Promise<void> {
     const embed = EmbedFactory.createRoleEmbed(entry, target, "Role Update");
 
-    // Helper to format permission changes
     const formatPermissionChanges = (
       oldPerms: bigint | string | undefined,
       newPerms: bigint | string | undefined
     ): { added: string[]; removed: string[] } => {
-      const oldBits = BigInt(oldPerms || 0);
-      const newBits = BigInt(newPerms || 0);
+      let oldBits: bigint;
+      let newBits: bigint;
+
+      try {
+        oldBits =
+          typeof oldPerms === "string"
+            ? BigInt(oldPerms)
+            : BigInt(oldPerms || 0);
+      } catch {
+        oldBits = 0n;
+      }
+
+      try {
+        newBits =
+          typeof newPerms === "string"
+            ? BigInt(newPerms)
+            : BigInt(newPerms || 0);
+      } catch {
+        newBits = 0n;
+      }
+
+      console.log("Permission bits:", {
+        oldBits: oldBits.toString(),
+        newBits: newBits.toString(),
+      });
 
       const permissionNames: { [key: string]: bigint } = {
         CreateInstantInvite: 1n << 0n,
@@ -1812,6 +1842,7 @@ class c0rd {
         }
       }
 
+      console.log("Permission changes detected:", { added, removed });
       return { added, removed };
     };
 
@@ -1989,6 +2020,16 @@ class c0rd {
                   inline: false,
                 });
               }
+            } else {
+              // Handle any unknown change keys
+              const keyName = String(change.key).replace(/_/g, " ");
+              const displayName =
+                keyName.charAt(0).toUpperCase() + keyName.slice(1);
+              embed.addFields({
+                name: displayName,
+                value: "Modified",
+                inline: true,
+              });
             }
           }
         }
@@ -2490,7 +2531,6 @@ class c0rd {
         break;
     }
 
-    // Send to integrations channel
     await this.loggingChannels.integrations.send({ embeds: [embed] });
   }
 
@@ -2519,7 +2559,6 @@ class c0rd {
       }`
     );
 
-    // Send to integrations channel
     await this.loggingChannels.integrations.send({ embeds: [embed] });
   }
 
@@ -2559,7 +2598,7 @@ class c0rd {
             : undefined;
 
           if (roleArray && roleArray.length > 0) {
-            // Extract role names only - no tagging
+            // Extract role names only
             const rolesFormatted = (
               roleArray as Array<{ id: string; name: string }>
             )
@@ -2593,8 +2632,6 @@ class c0rd {
         inline: false,
       });
     }
-
-    // Send to roles channel
     await this.loggingChannels.roles.send({ embeds: [embed] });
   }
 
@@ -2620,7 +2657,6 @@ class c0rd {
       });
     }
 
-    // Send to integrations channel
     await this.loggingChannels.integrations.send({ embeds: [embed] });
   }
 
@@ -2642,14 +2678,12 @@ class c0rd {
     if (!this.isReady || invite.guild?.id !== CONFIG.targetGuildId) return;
 
     try {
-      // Remove from cache
       this.inviteCache.delete(invite.code);
     } catch (error) {
       console.error("Error | Removing invite from cache:", error);
     }
   }
 
-  // Scheduled Event Handlers
   private async onScheduledEventCreate(
     event: GuildScheduledEvent
   ): Promise<void> {
@@ -2899,114 +2933,6 @@ class c0rd {
       console.error("Error | Logging scheduled event user remove:", error);
     }
   }
-
-  // Poll Handlers
-  private async onPollVoteAdd(
-    answer: PollAnswer,
-    userId: string
-  ): Promise<void> {
-    if (!this.isReady) return;
-
-    try {
-      const message = answer.poll.message;
-      if (!message.guild || message.guild.id !== CONFIG.targetGuildId) return;
-
-      const user = await this.client.users.fetch(userId).catch(() => null);
-
-      const embed = new EmbedBuilder()
-        .setColor(Colors.Green)
-        .setTitle("Poll Vote Added")
-        .setDescription(`**Question:** ${answer.poll.question.text}`)
-        .addFields(
-          {
-            name: "Voted For",
-            value: answer.text || `Option ${answer.id}`,
-            inline: true,
-          },
-          {
-            name: "Message",
-            value: `[Jump to Poll](${message.url})`,
-            inline: true,
-          }
-        );
-
-      if (user) {
-        embed.setAuthor({
-          name: formatUserForTitle(user),
-          iconURL: user.displayAvatarURL(),
-        });
-        embed.addFields({
-          name: "Voter",
-          value: formatUser(user),
-          inline: true,
-        });
-      } else {
-        embed.addFields({
-          name: "Voter",
-          value: `<@${userId}> / ${userId}`,
-          inline: true,
-        });
-      }
-
-      await this.loggingChannels.polls.send({ embeds: [embed] });
-    } catch (error) {
-      console.error("Error | Logging poll vote add:", error);
-    }
-  }
-
-  private async onPollVoteRemove(
-    answer: PollAnswer,
-    userId: string
-  ): Promise<void> {
-    if (!this.isReady) return;
-
-    try {
-      const message = answer.poll.message;
-      if (!message.guild || message.guild.id !== CONFIG.targetGuildId) return;
-
-      const user = await this.client.users.fetch(userId).catch(() => null);
-
-      const embed = new EmbedBuilder()
-        .setColor(Colors.Red)
-        .setTitle("Poll Vote Removed")
-        .setDescription(`**Question:** ${answer.poll.question.text}`)
-        .addFields(
-          {
-            name: "Removed Vote From",
-            value: answer.text || `Option ${answer.id}`,
-            inline: true,
-          },
-          {
-            name: "Message",
-            value: `[Jump to Poll](${message.url})`,
-            inline: true,
-          }
-        );
-
-      if (user) {
-        embed.setAuthor({
-          name: formatUserForTitle(user),
-          iconURL: user.displayAvatarURL(),
-        });
-        embed.addFields({
-          name: "Voter",
-          value: formatUser(user),
-          inline: true,
-        });
-      } else {
-        embed.addFields({
-          name: "Voter",
-          value: `<@${userId}> / ${userId}`,
-          inline: true,
-        });
-      }
-
-      await this.loggingChannels.polls.send({ embeds: [embed] });
-    } catch (error) {
-      console.error("Error | Logging poll vote remove:", error);
-    }
-  }
-
   async start(): Promise<void> {
     try {
       await this.client.login(CONFIG.token);
@@ -3017,6 +2943,5 @@ class c0rd {
   }
 }
 
-// Start the bot
 const bot = new c0rd();
 bot.start();

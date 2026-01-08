@@ -191,11 +191,51 @@ export class EmbedFactory {
   static createMessageEditEmbed(
     oldMessage: Message,
     newMessage: Message
-  ): EmbedBuilder {
+  ): { embed: EmbedBuilder; mediaUrls: string[] } {
     const embed = this.createBaseEmbed()
       .setColor(Colors.Blue)
       .setTitle("Message Edited")
       .setDescription(`[Jump to Message](${newMessage.url})`);
+
+    const mediaUrls: string[] = [];
+
+    // Regex to extract media URLs from content
+    const urlRegex =
+      /(https?:\/\/[^\s]+\.(gif|png|jpg|jpeg|webp|mp4|webm|mov)(\?[^\s]*)?)/gi;
+    const tenorGiphyRegex =
+      /(https?:\/\/(tenor\.com|giphy\.com|media\.tenor\.com|media\.giphy\.com|i\.imgur\.com|imgur\.com\/[a-zA-Z0-9]+)[^\s]*)/gi;
+
+    // Extract media from old content
+    const oldContentMedia: string[] = [];
+    let oldContentClean = oldMessage.content || "";
+    const oldDirectMatches = oldMessage.content?.match(urlRegex) || [];
+    for (const url of oldDirectMatches) {
+      oldContentMedia.push(url);
+      oldContentClean = oldContentClean.replace(url, "").trim();
+    }
+    const oldEmbedMatches = oldMessage.content?.match(tenorGiphyRegex) || [];
+    for (const url of oldEmbedMatches) {
+      if (!oldContentMedia.includes(url)) {
+        oldContentMedia.push(url);
+        oldContentClean = oldContentClean.replace(url, "").trim();
+      }
+    }
+
+    // Extract media from new content
+    const newContentMedia: string[] = [];
+    let newContentClean = newMessage.content || "";
+    const newDirectMatches = newMessage.content?.match(urlRegex) || [];
+    for (const url of newDirectMatches) {
+      newContentMedia.push(url);
+      newContentClean = newContentClean.replace(url, "").trim();
+    }
+    const newEmbedMatches = newMessage.content?.match(tenorGiphyRegex) || [];
+    for (const url of newEmbedMatches) {
+      if (!newContentMedia.includes(url)) {
+        newContentMedia.push(url);
+        newContentClean = newContentClean.replace(url, "").trim();
+      }
+    }
 
     if (newMessage.author) {
       const displayName =
@@ -214,21 +254,70 @@ export class EmbedFactory {
       inline: true,
     });
 
-    if (oldMessage.content !== newMessage.content) {
-      embed.addFields(
-        {
-          name: "Before",
-          value: oldMessage.content?.substring(0, 1024) || "*No text content*",
-        },
-        {
-          name: "After",
-          value: newMessage.content?.substring(0, 1024) || "*No text content*",
-        }
-      );
+    // Check which media URLs are new (not in old)
+    const newOnlyMedia = newContentMedia.filter(
+      (url) => !oldContentMedia.includes(url)
+    );
+    const LTR = "\u200E";
+
+    let oldDisplay = oldContentClean || "*No text content*";
+    if (oldContentMedia.length > 0) {
+      const attachmentNote =
+        oldContentMedia.length === 1
+          ? `*${LTR}[Attachment]${LTR}*`
+          : `*${LTR}[${oldContentMedia.length} Attachments]${LTR}*`;
+      oldDisplay = oldContentClean
+        ? `${oldContentClean}\n${attachmentNote}`
+        : attachmentNote;
+    }
+
+    let newDisplay = newContentClean || "*No text content*";
+    if (newOnlyMedia.length > 0) {
+      const attachmentNote =
+        newOnlyMedia.length === 1
+          ? `*${LTR}[Attachment]${LTR}*`
+          : `*${LTR}[${newOnlyMedia.length} Attachments]${LTR}*`;
+      newDisplay = newContentClean
+        ? `${newContentClean}\n${attachmentNote}`
+        : attachmentNote;
+    }
+
+    embed.addFields(
+      {
+        name: "Before",
+        value: oldDisplay.substring(0, 1024),
+      },
+      {
+        name: "After",
+        value: newDisplay.substring(0, 1024),
+      }
+    );
+
+    // Add old media URLs to be sent separately
+    mediaUrls.push(...oldContentMedia);
+    // Add new media URLs (avoiding duplicates)
+    for (const url of newContentMedia) {
+      if (!mediaUrls.includes(url)) {
+        mediaUrls.push(url);
+      }
     }
 
     if (newMessage.attachments.size > 0) {
-      const attachmentList = newMessage.attachments
+      const attachments = Array.from(newMessage.attachments.values());
+      const images = attachments.filter(
+        (a) =>
+          a.contentType?.startsWith("image/") &&
+          !a.contentType?.includes("gif") &&
+          !a.name?.endsWith(".gif")
+      );
+      const gifs = attachments.filter(
+        (a) => a.contentType === "image/gif" || a.name?.endsWith(".gif")
+      );
+      const videos = attachments.filter((a) =>
+        a.contentType?.startsWith("video/")
+      );
+
+      const attachmentList = attachments
         .map((a) => {
           const isImage = a.contentType?.startsWith("image/");
           const isVideo = a.contentType?.startsWith("video/");
@@ -251,13 +340,16 @@ export class EmbedFactory {
         inline: false,
       });
 
-      const firstImage = newMessage.attachments.find(
-        (a) =>
-          a.contentType?.startsWith("image/") && !a.contentType?.includes("gif")
-      );
-      if (firstImage) {
-        embed.setImage(firstImage.url);
+      // First non-gif image goes in embed
+      if (images.length > 0) {
+        embed.setImage(images[0].url);
+        // Additional images sent separately
+        mediaUrls.push(...images.slice(1).map((a) => a.url));
       }
+
+      // GIFs and videos sent as separate messages so they animate/play
+      mediaUrls.push(...gifs.map((a) => a.url));
+      mediaUrls.push(...videos.map((a) => a.url));
     }
 
     if (newMessage.stickers.size > 0) {
@@ -275,7 +367,7 @@ export class EmbedFactory {
       });
     }
 
-    return embed;
+    return { embed, mediaUrls };
   }
 
   static createMemberJoinEmbed(member: GuildMember): EmbedBuilder {

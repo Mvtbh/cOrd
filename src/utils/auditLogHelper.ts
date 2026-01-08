@@ -106,13 +106,9 @@ export class AuditLogHelper {
   }
 
   static isModerationAction(action: AuditLogEvent): boolean {
-    return [
-      AuditLogEvent.MemberBanAdd,
-      AuditLogEvent.MemberBanRemove,
-      AuditLogEvent.MemberKick,
-      AuditLogEvent.MemberUpdate,
-      AuditLogEvent.MemberDisconnect,
-    ].includes(action);
+    return [AuditLogEvent.MemberKick, AuditLogEvent.MemberUpdate].includes(
+      action
+    );
   }
 
   static isRoleAction(action: AuditLogEvent): boolean {

@@ -134,11 +134,6 @@ export const CHANNEL_CONFIG = {
       topic: "Logs for screenshare and video stream events",
     },
     {
-      key: "polls",
-      name: "poll",
-      topic: "Logs for poll events (create, end, votes)",
-    },
-    {
       key: "events",
       name: "event",
       topic:
