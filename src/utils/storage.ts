@@ -46,9 +46,9 @@ export class StorageManager {
         JSON.stringify(storage, null, 2),
         "utf8"
       );
-      console.log("Channel storage saved successfully");
+      console.log("Info | Channel storage saved successfully");
     } catch (error) {
-      console.error("Error saving channel storage:", error);
+      console.error("Error | Channel storage saving failed:", error);
     }
   }
 
